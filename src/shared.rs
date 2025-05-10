@@ -1,8 +1,13 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Person {
     pub name: String,
     pub age: u8,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Request {
+    Get(String),
+    Post(Person),
+}

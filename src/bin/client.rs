@@ -1,6 +1,6 @@
 use tokio::net::UnixStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use unix_socket_rest::shared::Person;
+use unix_socket_rest::shared::{Person, Request};
 use rmp_serde::{from_slice, to_vec};
 use std::io::{self, Write};
 
@@ -20,9 +20,11 @@ async fn main() -> std::io::Result<()> {
 
     let mut stream = UnixStream::connect("/tmp/rust_uds.sock").await?;
 
-    let msg = Person { name, age };
+    let person = Person { name, age };
 
-    let encoded = to_vec(&msg).unwrap();
+    let request = Request::Post(person.clone());
+
+    let encoded = to_vec(&request).unwrap();
     let len = (encoded.len() as u32).to_be_bytes();
 
     stream.write_all(&len).await?;
