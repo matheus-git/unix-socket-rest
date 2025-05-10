@@ -2,15 +2,25 @@ use tokio::net::UnixStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use unix_socket_rest::shared::Person;
 use rmp_serde::{from_slice, to_vec};
+use std::io::{self, Write};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    let mut name = String::new();
+    print!("Enter name: ");
+    io::stdout().flush().unwrap();
+    io::stdin().read_line(&mut name).unwrap();
+    let name = name.trim().to_string();
+
+    let mut age_str = String::new();
+    print!("Enter age: ");
+    io::stdout().flush().unwrap();
+    io::stdin().read_line(&mut age_str).unwrap();
+    let age: u8 = age_str.trim().parse().expect("Invalid age");
+
     let mut stream = UnixStream::connect("/tmp/rust_uds.sock").await?;
 
-    let msg = Person {
-        name: "Ana".into(),
-        age: 30,
-    };
+    let msg = Person { name, age };
 
     let encoded = to_vec(&msg).unwrap();
     let len = (encoded.len() as u32).to_be_bytes();
@@ -26,7 +36,7 @@ async fn main() -> std::io::Result<()> {
     stream.read_exact(&mut buf).await?;
     let response: Person = from_slice(&buf).unwrap();
 
-    println!("Resposta: {:?}", response);
+    println!("Response: {:?}", response);
     Ok(())
 }
 
