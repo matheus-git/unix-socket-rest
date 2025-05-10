@@ -1,4 +1,4 @@
-use tokio::net::UnixListener;
+use tokio::net::{UnixListener, UnixStream};
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::fs;
@@ -26,7 +26,6 @@ async fn main() -> std::io::Result<()> {
     let _ = fs::remove_file(path); 
 
     let listener = UnixListener::bind(path)?;
-    println!("Servidor rodando em {}", path);
 
     let list_person = Arc::new(Mutex::new(ListPerson::default()));
 
@@ -35,14 +34,21 @@ async fn main() -> std::io::Result<()> {
         let list_person = Arc::clone(&list_person);
 
         tokio::spawn(async move {
-            let mut len_buf = [0u8; 4];
-            if socket.read_exact(&mut len_buf).await.is_err() { return; }
+            let len = match get_len_request(&mut socket).await {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("Failed to read length: {}", e);
+                    return;
+                }
+            };
 
-            let len = u32::from_be_bytes(len_buf) as usize;
-            let mut buf = vec![0u8; len];
-            if socket.read_exact(&mut buf).await.is_err() { return; }
-
-            let request: Request = from_slice(&buf).unwrap();
+            let request = match get_request(&mut socket, len).await {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("Failed to read request: {}", e);
+                    return;
+                }
+            };
 
             let mut list = list_person.lock().unwrap();
             handle_request(&mut list, request);
@@ -51,10 +57,27 @@ async fn main() -> std::io::Result<()> {
     }
 }
 
+pub async fn get_len_request(socket: &mut UnixStream) -> Result<usize, std::io::Error> {
+    let mut len_buf = [0u8; 4];
+    socket.read_exact(&mut len_buf).await?;
+    Ok(u32::from_be_bytes(len_buf) as usize)
+}
+
+pub async fn get_request(socket: &mut UnixStream, len: usize) -> Result<Request, Box<dyn std::error::Error>> {
+    let mut buf = vec![0u8; len];
+    socket.read_exact(&mut buf).await?;
+    let request: Request = from_slice(&buf)?;
+    Ok(request)
+}
+
 fn handle_request(list_person: &mut ListPerson, request: Request ){
     match request {
-        Request::Get(name) => list_person.find_by_name(name),
-        Request::Post(person) =>  list_person.add(person),
+        Request::Get(name) => {
+            list_person.find_by_name(name);
+        },
+        Request::Post(person) =>  {
+            list_person.add(person);
+        },
     }
 }
 

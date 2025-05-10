@@ -6,6 +6,35 @@ use std::io::{self, Write};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    let mut stream = UnixStream::connect("/tmp/rust_uds.sock").await?;
+
+    let request = get_request();
+
+    let encoded = to_vec(&request).unwrap();
+
+    send_len_request(&mut stream, &encoded).await?;
+    send_encoded(&mut stream, &encoded).await?;
+    Ok(())
+}
+
+async fn send_len_request(stream: &mut UnixStream, encoded: &Vec<u8>) -> Result<(), std::io::Error> {
+    let len_bytes = (encoded.len() as u32).to_be_bytes();
+
+    stream.write_all(&len_bytes).await?;
+    Ok(())
+}
+
+async fn send_encoded(stream: &mut UnixStream, encoded: &Vec<u8>) -> Result<(),std::io::Error> {
+    stream.write_all(&encoded).await?;
+    Ok(())
+}
+
+fn get_request() -> Request {
+    let person = prompt_for_person();
+    Request::Post(person.clone())
+}
+
+fn prompt_for_person() -> Person {
     let mut name = String::new();
     print!("Enter name: ");
     io::stdout().flush().unwrap();
@@ -18,27 +47,5 @@ async fn main() -> std::io::Result<()> {
     io::stdin().read_line(&mut age_str).unwrap();
     let age: u8 = age_str.trim().parse().expect("Invalid age");
 
-    let mut stream = UnixStream::connect("/tmp/rust_uds.sock").await?;
-
-    let person = Person { name, age };
-
-    let request = Request::Post(person.clone());
-
-    let encoded = to_vec(&request).unwrap();
-    let len = (encoded.len() as u32).to_be_bytes();
-
-    stream.write_all(&len).await?;
-    stream.write_all(&encoded).await?;
-
-    let mut len_buf = [0u8; 4];
-    stream.read_exact(&mut len_buf).await?;
-    let len = u32::from_be_bytes(len_buf) as usize;
-
-    let mut buf = vec![0u8; len];
-    stream.read_exact(&mut buf).await?;
-    let response: Person = from_slice(&buf).unwrap();
-
-    println!("Response: {:?}", response);
-    Ok(())
+    Person { name, age }
 }
-
