@@ -52,7 +52,6 @@ async fn main() -> std::io::Result<()> {
 
             let mut list = list_person.lock().unwrap();
             handle_request(&mut list, request);
-            println!("{:?}", *list);
         });
     }
 }
@@ -73,7 +72,10 @@ pub async fn get_request(socket: &mut UnixStream, len: usize) -> Result<Request,
 fn handle_request(list_person: &mut ListPerson, request: Request ){
     match request {
         Request::Get(name) => {
-            list_person.find_by_name(name);
+            let person = list_person.find_by_name(name);
+            if let Some(person) = person {
+                println!("GET: {:?}", person);
+            }
         },
         Request::Post(person) =>  {
             list_person.add(person);
