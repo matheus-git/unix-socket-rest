@@ -1,0 +1,10 @@
+[package]
+name = "unix-socket-rest"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+rmp-serde = "1.1"
+serde = { version = "1", features = ["derive"] }
+
