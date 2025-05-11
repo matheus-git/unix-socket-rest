@@ -1,8 +1,9 @@
 use tokio::net::{UnixListener, UnixStream};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::fs;
-use unix_socket_rest::shared::{Person, Request};
+use unix_socket_rest::shared::{Person, Request, Response};
 use rmp_serde::{from_slice, to_vec};
 
 #[derive(Debug, Default)]
@@ -17,6 +18,14 @@ impl ListPerson {
 
     fn add(&mut self, person: Person) {
         self.persons.push(person)
+    }
+
+    fn remove_by_name(&mut self, name: &str) -> Option<Person> {
+        if let Some(pos) = self.persons.iter().position(|p| p.name == name) {
+            Some(self.persons.remove(pos))
+        } else {
+            None
+        }
     }
 }
 
@@ -34,24 +43,15 @@ async fn main() -> std::io::Result<()> {
         let list_person = Arc::clone(&list_person);
 
         tokio::spawn(async move {
-            let len = match get_len_request(&mut socket).await {
-                Ok(l) => l,
-                Err(e) => {
-                    eprintln!("Failed to read length: {}", e);
-                    return;
-                }
-            };
+            let len = get_len_request(&mut socket).await.unwrap();
+            let request = get_request(&mut socket, len).await.unwrap();
 
-            let request = match get_request(&mut socket, len).await {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("Failed to read request: {}", e);
-                    return;
-                }
-            };
+            let mut list = list_person.lock().await;
+            let response = handle_request(&mut list, request);
+            let encoded = to_vec(&response).unwrap();
 
-            let mut list = list_person.lock().unwrap();
-            handle_request(&mut list, request);
+            send_len_request(&mut socket, &encoded).await.unwrap();
+            send_encoded(&mut socket, &encoded).await.unwrap();
         });
     }
 }
@@ -69,17 +69,34 @@ pub async fn get_request(socket: &mut UnixStream, len: usize) -> Result<Request,
     Ok(request)
 }
 
-fn handle_request(list_person: &mut ListPerson, request: Request ){
+async fn send_len_request(socket: &mut UnixStream, encoded: &Vec<u8>) -> Result<(), std::io::Error> {
+    let len_bytes = (encoded.len() as u32).to_be_bytes();
+
+    socket.write_all(&len_bytes).await?;
+    Ok(())
+}
+
+async fn send_encoded(socket: &mut UnixStream, encoded: &Vec<u8>) -> Result<(),std::io::Error> {
+    socket.write_all(&encoded).await?;
+    Ok(())
+}
+
+fn handle_request(list_person: &mut ListPerson, request: Request ) -> Response {
     match request {
         Request::Get(name) => {
-            let person = list_person.find_by_name(name);
-            if let Some(person) = person {
-                println!("GET: {:?}", person);
+            return match list_person.find_by_name(name) {
+                Some(person) => Response::Ok(person.clone()),
+                None => Response::NotFound("Not found".to_string())
             }
         },
         Request::Post(person) =>  {
-            list_person.add(person);
+            list_person.add(person.clone());
+            return Response::Created;
         },
+        Request::Delete(name) => {
+            list_person.remove_by_name(&name);
+            return Response::Deleted;
+        }
     }
 }
 

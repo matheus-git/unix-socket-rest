@@ -10,4 +10,14 @@ pub struct Person {
 pub enum Request {
     Get(String),
     Post(Person),
+    Delete(String)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Response {
+    Ok(Person),
+    NotFound(String),
+    Created,
+    Deleted,
+    Error(String),
 }
