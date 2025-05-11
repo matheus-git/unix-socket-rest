@@ -43,15 +43,32 @@ async fn main() -> std::io::Result<()> {
         let list_person = Arc::clone(&list_person);
 
         tokio::spawn(async move {
-            let len = get_len_request(&mut socket).await.unwrap();
-            let request = get_request(&mut socket, len).await.unwrap();
+            let len = match get_len_request(&mut socket).await {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("Failed to read length: {}", e);
+                    return;
+                }
+            };
+
+            let request = match get_request(&mut socket, len).await {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("Failed to read request: {}", e); 
+                    return;
+                }
+            };
 
             let mut list = list_person.lock().await;
             let response = handle_request(&mut list, request);
             let encoded = to_vec(&response).unwrap();
 
-            send_len_request(&mut socket, &encoded).await.unwrap();
-            send_encoded(&mut socket, &encoded).await.unwrap();
+            if let Err(e) = send_len_request(&mut socket, &encoded).await {
+                eprintln!("Failed to send length: {}", e);
+            }
+            if let Err(e) = send_encoded(&mut socket, &encoded).await {
+                eprintln!("Failed to send response: {}", e);
+            }
         });
     }
 }
@@ -90,12 +107,14 @@ fn handle_request(list_person: &mut ListPerson, request: Request ) -> Response {
             }
         },
         Request::Post(person) =>  {
-            list_person.add(person.clone());
+            list_person.add(person);
             return Response::Created;
         },
         Request::Delete(name) => {
-            list_person.remove_by_name(&name);
-            return Response::Deleted;
+            return match list_person.remove_by_name(&name) {
+                Some(_) => Response::Deleted,
+                None => Response::NotFound("Person not found".into()),
+            }
         }
     }
 }

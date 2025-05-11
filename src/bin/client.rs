@@ -3,6 +3,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use unix_socket_rest::shared::{Person, Request, Response};
 use rmp_serde::{from_slice, to_vec};
 use std::io::{self, Write};
+use std::process;
 
 #[tokio::main]
 async fn main() -> Result<(),Box<dyn std::error::Error>> {
@@ -75,6 +76,9 @@ fn menu() -> Request {
             "3" => {
                 return Request::Delete(prompt_name())
             }
+            "4" => {
+                process::exit(0);
+            }
             _ => println!("Invalid option, try again."),
         }
     }
@@ -102,4 +106,4 @@ fn prompt_for_person() -> Person {
     let age: u8 = age_str.trim().parse().expect("Invalid age");
 
     Person { name, age }
-}
+}   
