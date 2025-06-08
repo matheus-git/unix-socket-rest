@@ -1,11 +1,14 @@
 use tokio::net::UnixListener;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use std::fs;
+use std::fs::{self, File};
 use unix_socket_rest::shared::{Person, Request, Response, get_data_len, get_data, send_encoded, send_len_request};
 use rmp_serde::to_vec;
+use bincode::{serialize_into, deserialize_from};
 
-#[derive(Debug, Default)]
+const DB_PATH: &str = "data.bin";
+
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 struct ListPerson {
     persons: Vec<Person>
 }
@@ -16,7 +19,7 @@ impl ListPerson {
     }
 
     fn add(&mut self, person: Person) {
-        self.persons.push(person)
+        self.persons.push(person);
     }
 
     fn remove_by_name(&mut self, name: &str) -> Option<Person> {
@@ -24,6 +27,21 @@ impl ListPerson {
             Some(self.persons.remove(pos))
         } else {
             None
+        }
+    }
+
+    fn load_from_file() -> Self {
+        if let Ok(mut file) = File::open(DB_PATH) {
+            if let Ok(data) = deserialize_from(&mut file) {
+                return data;
+            }
+        }
+        ListPerson::default()
+    }
+
+    fn save_to_file(&self) {
+        if let Ok(mut file) = File::create(DB_PATH) {
+            let _ = serialize_into(&mut file, self);
         }
     }
 }
@@ -35,7 +53,7 @@ async fn main() -> std::io::Result<()> {
 
     let listener = UnixListener::bind(path)?;
 
-    let list_person = Arc::new(Mutex::new(ListPerson::default()));
+    let list_person = Arc::new(Mutex::new(ListPerson::load_from_file()));
 
     loop {
         let (mut socket, _addr) = listener.accept().await?;
@@ -82,13 +100,16 @@ fn handle_request(list_person: &mut ListPerson, request: Request ) -> Response {
         },
         Request::Post(person) =>  {
             list_person.add(person);
+            list_person.save_to_file();
             return Response::Created;
         },
         Request::Delete(name) => {
-            return match list_person.remove_by_name(&name) {
+            let result = match list_person.remove_by_name(&name) {
                 Some(_) => Response::Deleted,
                 None => Response::NotFound("Person not found".into()),
-            }
+            };
+            list_person.save_to_file();
+            result
         },
         Request::List => {
             Response::List(list_person.persons.clone())
