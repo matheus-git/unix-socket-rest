@@ -32,7 +32,7 @@ impl ListPerson {
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let path = "/tmp/rust_uds.sock";
-    let _ = fs::remove_file(path); 
+    fs::remove_file(path)?; 
 
     let listener = UnixListener::bind(path)?;
 
@@ -115,6 +115,9 @@ fn handle_request(list_person: &mut ListPerson, request: Request ) -> Response {
                 Some(_) => Response::Deleted,
                 None => Response::NotFound("Person not found".into()),
             }
+        },
+        Request::List => {
+            Response::List(list_person.persons.clone())
         }
     }
 }

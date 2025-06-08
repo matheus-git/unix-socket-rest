@@ -10,7 +10,8 @@ pub struct Person {
 pub enum Request {
     Get(String),
     Post(Person),
-    Delete(String)
+    Delete(String),
+    List
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -19,5 +20,6 @@ pub enum Response {
     NotFound(String),
     Created,
     Deleted,
+    List(Vec<Person>),
     Error(String),
 }
