@@ -4,17 +4,18 @@ use tokio::sync::Mutex;
 use std::fs::{self, File};
 use unix_socket_rest::shared::{Person, Request, Response, get_data_len, get_data, send_encoded, send_len_request};
 use rmp_serde::to_vec;
-use bincode::{serialize_into, deserialize_from};
+use bincode::{encode_to_vec, decode_from_slice, config, Decode, Encode};
+use std::io::{Read, Write};
 
 const DB_PATH: &str = "data.bin";
 
-#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Encode, Decode)]
 struct ListPerson {
     persons: Vec<Person>
 }
 
 impl ListPerson {
-    fn find_by_name(&self, name: String) -> Option<&Person> {
+    fn find_by_name(&self, name: &str) -> Option<&Person> {
         self.persons.iter().find(|person| person.name == name)
     }
 
@@ -29,19 +30,25 @@ impl ListPerson {
             None
         }
     }
-
     fn load_from_file() -> Self {
+        let mut buf = Vec::new();
         if let Ok(mut file) = File::open(DB_PATH) {
-            if let Ok(data) = deserialize_from(&mut file) {
-                return data;
+            if file.read_to_end(&mut buf).is_ok() {
+                let config = config::standard();
+                if let Ok((list_person, _)) = decode_from_slice(&buf, config) {
+                    return list_person;
+                }
             }
         }
         ListPerson::default()
     }
 
     fn save_to_file(&self) {
-        if let Ok(mut file) = File::create(DB_PATH) {
-            let _ = serialize_into(&mut file, self);
+        let config = config::standard();
+        if let Ok(encoded) = encode_to_vec(self, config) {
+            if let Ok(mut file) = File::create(DB_PATH) {
+                let _ = file.write_all(&encoded);
+            }
         }
     }
 }
@@ -93,7 +100,7 @@ async fn main() -> std::io::Result<()> {
 fn handle_request(list_person: &mut ListPerson, request: Request ) -> Response {
     match request {
         Request::Get(name) => {
-            return match list_person.find_by_name(name) {
+            return match list_person.find_by_name(&name) {
                 Some(person) => Response::Ok(person.clone()),
                 None => Response::NotFound("Not found".to_string())
             }

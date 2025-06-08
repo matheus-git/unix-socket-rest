@@ -3,8 +3,9 @@ use tokio::net::UnixStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use rmp_serde::from_slice;
 use serde::de::DeserializeOwned;
+use bincode::{Decode, Encode};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Decode, Encode, Deserialize, Debug, Clone)]
 pub struct Person {
     pub name: String,
     pub age: u8,
