@@ -1,10 +1,9 @@
-use tokio::net::{UnixListener, UnixStream};
+use tokio::net::UnixListener;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::fs;
-use unix_socket_rest::shared::{Person, Request, Response};
-use rmp_serde::{from_slice, to_vec};
+use unix_socket_rest::shared::{Person, Request, Response, get_data_len, get_data, send_encoded, send_len_request};
+use rmp_serde::to_vec;
 
 #[derive(Debug, Default)]
 struct ListPerson {
@@ -43,7 +42,7 @@ async fn main() -> std::io::Result<()> {
         let list_person = Arc::clone(&list_person);
 
         tokio::spawn(async move {
-            let len = match get_len_request(&mut socket).await {
+            let len = match get_data_len(&mut socket).await {
                 Ok(l) => l,
                 Err(e) => {
                     eprintln!("Failed to read length: {}", e);
@@ -51,7 +50,7 @@ async fn main() -> std::io::Result<()> {
                 }
             };
 
-            let request = match get_request(&mut socket, len).await {
+            let request = match get_data(&mut socket, len).await {
                 Ok(r) => r,
                 Err(e) => {
                     eprintln!("Failed to read request: {}", e); 
@@ -71,31 +70,6 @@ async fn main() -> std::io::Result<()> {
             }
         });
     }
-}
-
-pub async fn get_len_request(socket: &mut UnixStream) -> Result<usize, std::io::Error> {
-    let mut len_buf = [0u8; 4];
-    socket.read_exact(&mut len_buf).await?;
-    Ok(u32::from_be_bytes(len_buf) as usize)
-}
-
-pub async fn get_request(socket: &mut UnixStream, len: usize) -> Result<Request, Box<dyn std::error::Error>> {
-    let mut buf = vec![0u8; len];
-    socket.read_exact(&mut buf).await?;
-    let request: Request = from_slice(&buf)?;
-    Ok(request)
-}
-
-async fn send_len_request(socket: &mut UnixStream, encoded: &Vec<u8>) -> Result<(), std::io::Error> {
-    let len_bytes = (encoded.len() as u32).to_be_bytes();
-
-    socket.write_all(&len_bytes).await?;
-    Ok(())
-}
-
-async fn send_encoded(socket: &mut UnixStream, encoded: &Vec<u8>) -> Result<(),std::io::Error> {
-    socket.write_all(&encoded).await?;
-    Ok(())
 }
 
 fn handle_request(list_person: &mut ListPerson, request: Request ) -> Response {

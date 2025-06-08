@@ -1,7 +1,6 @@
 use tokio::net::UnixStream;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use unix_socket_rest::shared::{Person, Request, Response};
-use rmp_serde::{from_slice, to_vec};
+use unix_socket_rest::shared::{Person, Request, Response, get_data_len, get_data, send_len_request, send_encoded};
+use rmp_serde::to_vec;
 use std::io::{self, Write};
 use std::process;
 
@@ -16,8 +15,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         send_len_request(&mut stream, &encoded).await?;
         send_encoded(&mut stream, &encoded).await?;
 
-        let len = get_len_response(&mut stream).await?;
-        let response: Response = get_response(&mut stream, len).await?;
+        let len = get_data_len(&mut stream).await?;
+        let response: Response = get_data(&mut stream, len).await?;
 
         match response {
             Response::Ok(person) => println!("Found person: {:?}", person),
@@ -33,30 +32,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ => println!("Other response."),
         };
     }
-}
-
-async fn get_len_response(socket: &mut UnixStream) -> Result<usize, std::io::Error> {
-    let mut len_buf = [0u8; 4];
-    socket.read_exact(&mut len_buf).await?;
-    Ok(u32::from_be_bytes(len_buf) as usize)
-}
-
-async fn get_response(socket: &mut UnixStream, len: usize) -> Result<Response, Box<dyn std::error::Error>> {
-    let mut buf = vec![0u8; len];
-    socket.read_exact(&mut buf).await?;
-    let response: Response = from_slice(&buf)?;
-    Ok(response)
-}
-
-async fn send_len_request(stream: &mut UnixStream, encoded: &Vec<u8>) -> Result<(), std::io::Error> {
-    let len_bytes = (encoded.len() as u32).to_be_bytes();
-    stream.write_all(&len_bytes).await?;
-    Ok(())
-}
-
-async fn send_encoded(stream: &mut UnixStream, encoded: &Vec<u8>) -> Result<(), std::io::Error> {
-    stream.write_all(&encoded).await?;
-    Ok(())
 }
 
 fn menu() -> Request {
